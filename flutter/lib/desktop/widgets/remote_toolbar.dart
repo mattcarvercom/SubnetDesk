@@ -1754,6 +1754,9 @@ class _DisplayMenuState extends State<_DisplayMenu> {
             ffi: widget.ffi,
             screenAdjustor: _screenAdjustor,
           ),
+        if (ffi.connType == ConnType.defaultConn &&
+            ffiModel.clientRotationSupported)
+          viewRotation(),
         if (showVirtualDisplayMenu(ffi) && ffi.connType == ConnType.defaultConn)
           _SubmenuButton(
             ffi: widget.ffi,
@@ -1950,6 +1953,55 @@ class _DisplayMenuState extends State<_DisplayMenu> {
             Divider(),
           ]));
     });
+  }
+
+  /// Client-side view rotation. Only local: the remote display is never
+  /// rotated. Shown for single-display sessions (for example a tablet with
+  /// a physically rotated panel that reports "normal" orientation to the
+  /// compositor).
+  viewRotation() {
+    return Obx(() {
+      final value = ffiModel.clientRotation.value.toString();
+      return _SubmenuButton(
+        ffi: widget.ffi,
+        child: Text(translate('View rotation')),
+        menuChildren: [
+          RdoMenuButton<String>(
+            value: '0',
+            groupValue: value,
+            onChanged: _changeViewRotation,
+            child: Text(translate('No rotation')),
+            ffi: ffi,
+          ),
+          RdoMenuButton<String>(
+            value: '90',
+            groupValue: value,
+            onChanged: _changeViewRotation,
+            child: Text(translate('Rotate 90° clockwise')),
+            ffi: ffi,
+          ),
+          RdoMenuButton<String>(
+            value: '180',
+            groupValue: value,
+            onChanged: _changeViewRotation,
+            child: Text(translate('Rotate 180°')),
+            ffi: ffi,
+          ),
+          RdoMenuButton<String>(
+            value: '270',
+            groupValue: value,
+            onChanged: _changeViewRotation,
+            child: Text(translate('Rotate 270° clockwise')),
+            ffi: ffi,
+          ),
+        ],
+      );
+    });
+  }
+
+  void _changeViewRotation(String? value) {
+    final v = int.tryParse(value ?? '0') ?? 0;
+    ffiModel.setClientRotation(v);
   }
 
   imageQuality() {

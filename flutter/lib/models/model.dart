@@ -41,6 +41,7 @@ import '../common/widgets/dialog.dart';
 import 'input_model.dart';
 import 'platform_model.dart';
 import 'package:flutter_hbb/utils/scale.dart';
+import 'view_rotation.dart';
 
 import 'package:flutter_hbb/generated_bridge.dart'
     if (dart.library.html) 'package:flutter_hbb/web/bridge.dart';
@@ -134,7 +135,61 @@ class FfiModel with ChangeNotifier {
 
   Timer? timerScreenshot;
 
-  Rect? get rect => _rect;
+  /// Local (client-side) view rotation in degrees: 0, 90, 180 or 270.
+  /// The remote display is never rotated; see [ViewRotation].
+  final RxInt clientRotation = 0.obs;
+  bool _clientRotationLoaded = false;
+
+  /// The true (base) display rect reported by the peer, unrotated.
+  Rect? get baseRect => _rect;
+
+  /// The display rect the client currently shows. When client-side rotation
+  /// is active the width and height are swapped for 90/270 degree rotations
+  /// so all layout and input math operates in the displayed (virtual)
+  /// coordinate space. The rect origin is kept unchanged.
+  Rect? get rect {
+    final r = _rect;
+    if (r == null) {
+      return r;
+    }
+    final rotation = clientRotationValue;
+    if (rotation == ViewRotation.none || !rotation.isQuarterTurn) {
+      return r;
+    }
+    return Rect.fromLTWH(r.left, r.top, r.height, r.width);
+  }
+
+  /// Whether client-side rotation is possible for the current display set.
+  /// Rotation is only applied for a single display.
+  bool get clientRotationSupported =>
+      _rect != null && _pi.getCurDisplays().length == 1;
+
+  /// The effective view rotation: the stored value if rotation is possible
+  /// for the current display set, otherwise [ViewRotation.none].
+  ViewRotation get clientRotationValue =>
+      clientRotationSupported
+          ? ViewRotation.fromAngle(clientRotation.value)
+          : ViewRotation.none;
+
+  /// Set and persist the local view rotation. [value] must be one of
+  /// 0, 90, 180, 270; anything else is treated as 0.
+  void setClientRotation(int value) {
+    final normalized = [0, 90, 180, 270].contains(value) ? value : 0;
+    if (clientRotation.value == normalized) {
+      return;
+    }
+    clientRotation.value = normalized;
+    bind.sessionPeerOption(
+      sessionId: sessionId,
+      name: kOptionClientRotation,
+      value: normalized.toString(),
+    );
+    // Recompute fit scale/offsets for the (possibly new) displayed
+    // dimensions, and force a repaint even when the view style is unchanged.
+    parent.target?.canvasModel.updateViewStyle();
+    parent.target?.canvasModel.notifyListeners();
+  }
+
   bool get isOriginalResolutionSet =>
       _pi.tryGetDisplayIfNotAllDisplay()?.isOriginalResolutionSet ?? false;
   bool get isVirtualDisplayResolution =>
@@ -668,6 +723,24 @@ class FfiModel with ChangeNotifier {
       await parent.target?.canvasModel.updateViewStyle(
         refreshMousePos: updateCursorPos,
       );
+      if (!_clientRotationLoaded) {
+        // Load the per-peer persisted view rotation once the session is
+        // established, so a previously chosen rotation applies from the
+        // first frame.
+        _clientRotationLoaded = true;
+        bind.sessionGetPeerOption(
+          sessionId: sessionId,
+          name: kOptionClientRotation,
+        ).then((value) {
+          final saved = int.tryParse(value) ?? 0;
+          if ([0, 90, 180, 270].contains(saved) &&
+              saved != clientRotation.value) {
+            clientRotation.value = saved;
+            parent.target?.canvasModel.updateViewStyle();
+            parent.target?.canvasModel.notifyListeners();
+          }
+        });
+      }
       _updateSessionWidthHeight(sessionId);
 
       // Keep pointer lock center in sync when using relative mouse mode.
@@ -3360,6 +3433,26 @@ class CursorModel with ChangeNotifier {
     }
   }
 
+  /// When client-side rotation is active, map a remote (base) cursor
+  /// position into the displayed (virtual) coordinate space. Returns null
+  /// when no rotation is active or the display rect is unknown.
+  Offset? _toVirtualCursorPos(double x, double y) {
+    final ffiModel = parent.target?.ffiModel;
+    if (ffiModel == null) {
+      return null;
+    }
+    final rotation = ffiModel.clientRotationValue;
+    if (rotation == ViewRotation.none) {
+      return null;
+    }
+    final base = ffiModel.baseRect;
+    if (base == null) {
+      return null;
+    }
+    final v = rotation.toVirtual(Offset(x - base.left, y - base.top), base.size);
+    return Offset(base.left + v.dx, base.top + v.dy);
+  }
+
   /// Update the cursor position.
   updateCursorPosition(Map<String, dynamic> evt, String id) async {
     if (!isConnIn2Secs()) {
@@ -3368,6 +3461,11 @@ class CursorModel with ChangeNotifier {
     }
     _x = double.parse(evt['x']);
     _y = double.parse(evt['y']);
+    final virtual = _toVirtualCursorPos(_x, _y);
+    if (virtual != null) {
+      _x = virtual.dx;
+      _y = virtual.dy;
+    }
     try {
       RemoteCursorMovedState.find(id).value = true;
     } catch (e) {
@@ -3380,9 +3478,26 @@ class CursorModel with ChangeNotifier {
     _displayOriginX = x;
     _displayOriginY = y;
     if (updateCursorPos) {
-      _x = x + 1;
-      _y = y + 1;
-      parent.target?.inputModel.moveMouse(x, y);
+      // The stored cursor position is in the displayed (virtual) space.
+      var nx = x + 1;
+      var ny = y + 1;
+      final virtualPos = _toVirtualCursorPos(nx, ny);
+      if (virtualPos != null) {
+        nx = virtualPos.dx;
+        ny = virtualPos.dy;
+      }
+      _x = nx;
+      _y = ny;
+      // [moveMouse] inverse-maps virtual coordinates back to the base space,
+      // so convert the base origin first to keep it unchanged.
+      var ox = x;
+      var oy = y;
+      final virtual = _toVirtualCursorPos(ox, oy);
+      if (virtual != null) {
+        ox = virtual.dx;
+        oy = virtual.dy;
+      }
+      parent.target?.inputModel.moveMouse(ox, oy);
     }
     parent.target?.canvasModel.resetOffset();
     notifyListeners();
@@ -3398,7 +3513,21 @@ class CursorModel with ChangeNotifier {
     _displayOriginY = y;
     _x = xCursor;
     _y = yCursor;
-    parent.target?.inputModel.moveMouse(x, y);
+    final virtual = _toVirtualCursorPos(_x, _y);
+    if (virtual != null) {
+      _x = virtual.dx;
+      _y = virtual.dy;
+    }
+    // [moveMouse] inverse-maps virtual coordinates back to the base space,
+    // so convert the base origin first to keep it unchanged.
+    var ox = x;
+    var oy = y;
+    final virtualOrigin = _toVirtualCursorPos(ox, oy);
+    if (virtualOrigin != null) {
+      ox = virtualOrigin.dx;
+      oy = virtualOrigin.dy;
+    }
+    parent.target?.inputModel.moveMouse(ox, oy);
     notifyListeners();
   }
 

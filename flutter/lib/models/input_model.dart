@@ -506,6 +506,7 @@ class InputModel {
       modify: (msg) => modify(msg),
       getPointerInsideImage: () => _pointerInsideImage,
       setPointerInsideImage: (inside) => _pointerInsideImage = inside,
+      rotateDelta: _rotateDeltaToBase,
     );
     _relativeMouse.onDisabled = () => onRelativeMouseModeDisabled?.call();
 
@@ -1096,13 +1097,39 @@ class InputModel {
     await sendMouse('up', button);
   }
 
+  /// When client-side view rotation is active, input points arrive in the
+  /// displayed (virtual) rect space. For the hardware-rotated panels this
+  /// feature targets, that space is the peer's pointer space: the compositor
+  /// reports its logical desktop in the displayed orientation, and the peer's
+  /// uinput range and layout remap are derived from it, while the advertised
+  /// base frame is the panel-rotated one. The point is therefore sent as-is,
+  /// so the server injects it unchanged and needs no knowledge of the
+  /// rotation (works with any SubnetDesk server).
+  Point? _rotatePointToBase(Point? p) {
+    return p;
+  }
+
+  /// Direction vectors (scroll / trackpad / relative / fling deltas) arrive in
+  /// the displayed (virtual) space, which for the targeted hardware-rotated
+  /// panels is the peer's pointer space. Send them unchanged (see
+  /// [_rotatePointToBase]).
+  Offset _rotateDeltaToBase(Offset delta) {
+    return delta;
+  }
+
   /// Send scroll event with scroll distance [y].
   Future<void> scroll(int y) async {
     if (isViewCamera) return;
+    var delta = Offset(0, y.toDouble());
+    delta = _rotateDeltaToBase(delta);
     await bind.sessionSendMouse(
         sessionId: sessionId,
-        msg: json
-            .encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
+        msg: json.encode(modify({
+          'id': id,
+          'type': 'wheel',
+          'x': delta.dx.round().toString(),
+          'y': delta.dy.round().toString(),
+        })));
   }
 
   /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
@@ -1163,10 +1190,18 @@ class InputModel {
     }
   }
 
-  /// Send mouse movement event with distance in [x] and [y].
+  /// Send mouse movement event with distance in [x] and [y]. The
+  /// coordinates are in the displayed (virtual) rect space; they are mapped
+  /// back to the base (remote) display space when client-side rotation is
+  /// active.
   Future<void> moveMouse(double x, double y) async {
     if (!keyboardPerm) return;
     if (isViewCamera) return;
+    final rotated = _rotatePointToBase(Point(x, y));
+    if (rotated != null) {
+      x = rotated.x.toDouble();
+      y = rotated.y.toDouble();
+    }
     var x2 = x.toInt();
     var y2 = y.toInt();
     await bind.sessionSendMouse(
@@ -1372,9 +1407,12 @@ class InputModel {
             Offset(x.toDouble(), y.toDouble()));
       } else {
         if (isViewCamera) return;
+        final rotated =
+            _rotateDeltaToBase(Offset(x.toDouble(), y.toDouble()));
         bind.sessionSendMouse(
             sessionId: sessionId,
-            msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
+            msg:
+                '{"type": "trackpad", "x": "${rotated.dx.round()}", "y": "${rotated.dy.round()}"}');
       }
     }
   }
@@ -1429,9 +1467,12 @@ class InputModel {
         return;
       }
 
+      final rotated =
+          _rotateDeltaToBase(Offset(dx.toDouble(), dy.toDouble()));
       bind.sessionSendMouse(
           sessionId: sessionId,
-          msg: '{"type": "trackpad", "x": "$dx", "y": "$dy"}');
+          msg:
+              '{"type": "trackpad", "x": "${rotated.dx.round()}", "y": "${rotated.dy.round()}"}');
       _scheduleFling(x, y, delay);
     });
   }
@@ -1697,6 +1738,10 @@ class InputModel {
       } else if (dy < 0) {
         dy = accel;
       }
+      final rotated =
+          _rotateDeltaToBase(Offset(dx.toDouble(), dy.toDouble()));
+      dx = rotated.dx.round();
+      dy = rotated.dy.round();
       bind.sessionSendMouse(
           sessionId: sessionId,
           msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
@@ -1851,7 +1896,7 @@ class InputModel {
       refreshMousePos();
     }
 
-    final pos = handlePointerDevicePos(
+    var pos = handlePointerDevicePos(
       kPointerEventKindMouse,
       x,
       y,
@@ -1865,12 +1910,16 @@ class InputModel {
     if (pos == null) {
       return null;
     }
+    final basePos = _rotatePointToBase(pos);
+    if (basePos == null) {
+      return null;
+    }
     if (type != '') {
       evt['x'] = '0';
       evt['y'] = '0';
     } else {
-      evt['x'] = '${pos.x.toInt()}';
-      evt['y'] = '${pos.y.toInt()}';
+      evt['x'] = '${basePos.x.toInt()}';
+      evt['y'] = '${basePos.y.toInt()}';
     }
 
     final buttons = evt['buttons'];
