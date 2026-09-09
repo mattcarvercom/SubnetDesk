@@ -9,7 +9,6 @@ enum SetupReadinessIssue {
   localNetwork,
   daemon,
   selinux,
-  wayland,
   loginWayland,
 }
 
@@ -28,7 +27,6 @@ class SetupReadinessSnapshot {
     this.daemonInstalled = true,
     this.selinuxEnforcing = false,
     this.showSelinuxWarning = true,
-    this.currentSessionWayland = false,
     this.loginSessionWayland = false,
   });
 
@@ -45,7 +43,6 @@ class SetupReadinessSnapshot {
   final bool daemonInstalled;
   final bool selinuxEnforcing;
   final bool showSelinuxWarning;
-  final bool currentSessionWayland;
   final bool loginSessionWayland;
 }
 
@@ -89,9 +86,7 @@ List<SetupReadinessIssue> resolveSetupReadinessIssues(
       if (snapshot.selinuxEnforcing && snapshot.showSelinuxWarning) {
         issues.add(SetupReadinessIssue.selinux);
       }
-      if (snapshot.currentSessionWayland) {
-        issues.add(SetupReadinessIssue.wayland);
-      } else if (snapshot.loginSessionWayland) {
+      if (snapshot.loginSessionWayland) {
         issues.add(SetupReadinessIssue.loginWayland);
       }
       break;
