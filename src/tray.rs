@@ -402,6 +402,7 @@ fn make_tray(show_icon: bool) -> hbb_common::ResultType<()> {
             // We create the icon once the event loop is actually running
             // to prevent issues like https://github.com/tauri-apps/tray-icon/issues/90
             let mut builder = TrayIconBuilder::new()
+                .with_id(crate::get_app_name().to_lowercase())
                 .with_menu(Box::new(tray_menu.clone()))
                 .with_tooltip(tooltip(service_enabled, session_count))
                 .with_icon(icon.clone());
