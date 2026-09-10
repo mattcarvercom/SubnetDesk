@@ -1117,6 +1117,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 return element.name.contains(_searchText.value);
               }).toList(growable: false)
             : entries;
+        // Keep rows lazy so large directories only build visible list items.
         final rows = filteredEntries.map((entry) {
           final sizeStr =
               entry.isFile ? readableFileSize(entry.size.toDouble()) : "";
@@ -1299,7 +1300,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   ],
                 ))),
           );
-        }).toList(growable: false);
+        });
 
         return Column(
           children: [
@@ -1315,7 +1316,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 controller: scrollController,
                 itemExtent: kDesktopFileTransferRowHeight,
                 itemBuilder: (context, index) {
-                  return rows[index];
+                  return rows.elementAt(index);
                 },
                 itemCount: rows.length,
               ),
