@@ -773,5 +773,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The screen sharing request ended without completing on the remote device", "คำขอแชร์หน้าจอบนอุปกรณ์ระยะไกลสิ้นสุดลงโดยไม่เสร็จสมบูรณ์"),
         ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk ไม่สามารถรับหน้าจอที่ใช้งานได้จาก XDG Desktop Portal ไลบรารี PipeWire อาจเก่าเกินไป"),
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk ไม่สามารถโหลดส่วนประกอบ GStreamer ที่จำเป็นสำหรับการบันทึกหน้าจอได้ ({})"),
+        ("Sync clipboard between sessions", "ซิงค์คลิปบอร์ดระหว่างเซสชัน"),
+        ("sync-clipboard-between-sessions-tip", "ข้อความหรือรูปภาพที่คัดลอกในเซสชันระยะไกลหนึ่งจะถูกส่งไปยังคลิปบอร์ดของเซสชันอื่นที่เชื่อมต่ออยู่ด้วย"),
     ].iter().cloned().collect();
 }
