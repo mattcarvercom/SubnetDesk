@@ -2342,6 +2342,7 @@ class CanvasModel with ChangeNotifier {
   }
 
   void updateLocalCursor(double x, double y) {
+    if (parent.target?.ffiModel.viewOnly == true) return;
     // If keyboard is not permitted, do not move cursor when mouse is moving.
     if (parent.target != null && parent.target!.ffiModel.keyboard) {
       // Draw cursor if is not desktop.
@@ -2697,7 +2698,7 @@ class CursorData {
     required this.width,
     required this.height,
   })  : hotx = hotxOrigin * scale,
-        hoty = hotxOrigin * scale;
+        hoty = hotyOrigin * scale;
 
   int _doubleToInt(double v) => (v * 10e6).round().toInt();
 
