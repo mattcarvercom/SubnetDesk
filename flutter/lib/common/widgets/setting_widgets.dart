@@ -199,11 +199,17 @@ List<(String, String)> otherDefaultSettings() => [
 class TrackpadSpeedWidget extends StatefulWidget {
   final SimpleWrapper<int> value;
   final Function(int)? onDebouncer;
+  final ValueChanged<String>? onTextChanged;
+  // IME actions call TextField.onSubmitted without reaching the dialog's
+  // raw Enter handler, so the dialog needs a separate submission callback.
+  final ValueChanged<String>? onTextSubmitted;
 
   const TrackpadSpeedWidget({
     super.key,
     required this.value,
     this.onDebouncer,
+    this.onTextChanged,
+    this.onTextSubmitted,
   });
 
   @override
@@ -244,6 +250,34 @@ class _TrackpadSpeedWidgetState extends State<TrackpadSpeedWidget> {
     if (widget.onDebouncer != null) {
       _debouncer.value = value;
     }
+    widget.onTextChanged?.call(_controller.text);
+  }
+
+  void updateTextValue(String text) {
+    widget.onTextChanged?.call(text);
+    final newValue = int.tryParse(text);
+    if (newValue == null ||
+        newValue < kMinTrackpadSpeed ||
+        newValue > kMaxTrackpadSpeed) {
+      return;
+    }
+    setState(() => widget.value.value = newValue);
+  }
+
+  void submitTextValue(String text) {
+    final onTextSubmitted = widget.onTextSubmitted;
+    if (onTextSubmitted != null) {
+      onTextSubmitted(text);
+      return;
+    }
+    if (widget.onTextChanged != null) {
+      return;
+    }
+    final newValue = int.tryParse(text);
+    if (newValue == null) {
+      return;
+    }
+    updateValue(newValue);
   }
 
   @override
@@ -266,10 +300,8 @@ class _TrackpadSpeedWidgetState extends State<TrackpadSpeedWidget> {
               controller: _controller,
               keyboardType: TextInputType.number,
               textAlign: TextAlign.center,
-              onSubmitted: (text) {
-                final value = int.tryParse(text);
-                if (value != null) updateValue(value);
-              },
+              onChanged: updateTextValue,
+              onSubmitted: submitTextValue,
             ),
           ),
           const SizedBox(width: 8),
