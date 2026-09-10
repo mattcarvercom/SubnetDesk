@@ -1,5 +1,5 @@
 Name:       subnetdesk
-Version:    1.4.2
+Version:    1.5.0
 Release:    0
 Summary:    RPM package
 License:    GPL-3.0
