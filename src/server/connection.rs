@@ -575,13 +575,9 @@ impl Connection {
             crate::rustdesk_interval(time::interval_at(Instant::now(), TEST_DELAY_TIMEOUT));
         let mut last_recv_time = Instant::now();
 
-        conn.stream.set_send_timeout(
-            if conn.file_transfer.is_some() || conn.port_forward_socket.is_some() || conn.terminal {
-                SEND_TIMEOUT_OTHER
-            } else {
-                SEND_TIMEOUT_VIDEO
-            },
-        );
+        // The connection type is not known until the login request arrives;
+        // `on_message` picks the type-specific timeout then.
+        conn.stream.set_send_timeout(SEND_TIMEOUT_VIDEO);
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         std::thread::spawn(move || Self::handle_input(_rx_input, tx_cloned));
@@ -1933,6 +1929,17 @@ impl Connection {
         if !self.configure_lan_connection_scope(lr).await {
             return false;
         }
+
+        self.stream.set_send_timeout(
+            if self.file_transfer.is_some()
+                || self.terminal
+                || matches!(self.lr.union, Some(login_request::Union::PortForward(_)))
+            {
+                SEND_TIMEOUT_OTHER
+            } else {
+                SEND_TIMEOUT_VIDEO
+            },
+        );
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if !should_use_terminal_os_login_scope(self.terminal, &lr.os_login.username) {
