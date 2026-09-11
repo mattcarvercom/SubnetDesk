@@ -56,6 +56,25 @@ enum ViewRotation {
     }
   }
 
+  /// Map a point from the displayed (virtual) coordinate space back to the
+  /// base (remote) coordinate space. The inverse of [toVirtual]; used for
+  /// features where the peer draws in its own frame space, such as the
+  /// whiteboard cursor of the view-only "Show my cursor" mode.
+  Offset toBase(Offset point, Size base) {
+    final w = base.width;
+    final h = base.height;
+    switch (this) {
+      case none:
+        return point;
+      case rot90:
+        return Offset(point.dy, h - point.dx);
+      case rot180:
+        return Offset(w - point.dx, h - point.dy);
+      case rot270:
+        return Offset(w - point.dy, point.dx);
+    }
+  }
+
   /// Rotate the hotspot of a cursor glyph drawn in a [cursorW]x[cursorH]
   /// cursor image, matching a glyph rotated by this rotation.
   Offset rotateHotspot(double cursorW, double cursorH, Offset hotspot) {

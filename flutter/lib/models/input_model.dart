@@ -18,6 +18,7 @@ import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
 import 'input_modifier_utils.dart';
 import 'relative_mouse_model.dart';
+import 'view_rotation.dart';
 import '../common.dart';
 import '../consts.dart';
 
@@ -1910,9 +1911,25 @@ class InputModel {
     if (pos == null) {
       return null;
     }
-    final basePos = _rotatePointToBase(pos);
+    var basePos = _rotatePointToBase(pos);
     if (basePos == null) {
       return null;
+    }
+    // View-only with "Show my cursor": the peer draws the viewer's cursor on
+    // its own display through the whiteboard overlay, which lives in the
+    // peer's frame space. Map the displayed point back to the frame space so
+    // the overlay lands where the viewer points (no-op without rotation).
+    if (isViewOnly && showMyCursor) {
+      final ffiModel = parent.target?.ffiModel;
+      final rotation = ffiModel?.clientRotationValue ?? ViewRotation.none;
+      final base = ffiModel?.baseRect;
+      if (base != null && rotation != ViewRotation.none) {
+        final p = rotation.toBase(
+            Offset(basePos.x.toDouble() - base.left,
+                basePos.y.toDouble() - base.top),
+            base.size);
+        basePos = Point(p.dx + base.left, p.dy + base.top);
+      }
     }
     if (type != '') {
       evt['x'] = '0';
