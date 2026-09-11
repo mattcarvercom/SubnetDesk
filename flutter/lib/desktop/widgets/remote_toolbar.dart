@@ -27,6 +27,7 @@ import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
 import 'package:flutter_hbb/utils/scale.dart';
 import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
+import 'package:flutter_hbb/common/widgets/safe_slider.dart';
 
 enum _ToolbarEdge { top, right, bottom, left }
 
@@ -1843,35 +1844,34 @@ class _CustomScaleMenuControlsState
     final colorScheme = Theme.of(context).colorScheme;
     const smallBtnConstraints = BoxConstraints(minWidth: 28, minHeight: 28);
 
-    final sliderControl = Semantics(
-      label: translate('Custom scale slider'),
-      value: '$scaleValue%',
-      child: SliderTheme(
-        data: SliderTheme.of(context).copyWith(
-          activeTrackColor: colorScheme.primary,
-          thumbColor: colorScheme.primary,
-          overlayColor: colorScheme.primary.withOpacity(0.1),
-          showValueIndicator: ShowValueIndicator.never,
-          thumbShape: _RectValueThumbShape(
-            min: CustomScaleControls.minPercent.toDouble(),
-            max: CustomScaleControls.maxPercent.toDouble(),
-            width: 52,
-            height: 24,
-            radius: 4,
-            displayValueForNormalized: (t) => mapPosToPercent(t),
-          ),
+    final sliderControl = SliderTheme(
+      data: SliderTheme.of(context).copyWith(
+        activeTrackColor: colorScheme.primary,
+        thumbColor: colorScheme.primary,
+        overlayColor: colorScheme.primary.withOpacity(0.1),
+        showValueIndicator: ShowValueIndicator.never,
+        thumbShape: _RectValueThumbShape(
+          min: CustomScaleControls.minPercent.toDouble(),
+          max: CustomScaleControls.maxPercent.toDouble(),
+          width: 52,
+          height: 24,
+          radius: 4,
+          displayValueForNormalized: (t) => mapPosToPercent(t),
         ),
-        child: Slider(
-          value: scalePos,
-          min: 0.0,
-          max: 1.0,
-          // Use a wide range of divisions (calculated as (CustomScaleControls.maxPercent - CustomScaleControls.minPercent)) to provide ~1% precision increments.
-          // This allows users to set precise scale values. Lower values would require more fine-tuning via the +/- buttons, which is undesirable for big ranges.
-          divisions:
-              (CustomScaleControls.maxPercent - CustomScaleControls.minPercent)
-                  .round(),
-          onChanged: onSliderChanged,
-        ),
+      ),
+      child: SafeSlider(
+        value: scalePos,
+        min: 0.0,
+        max: 1.0,
+        semanticLabel: translate('Custom scale slider'),
+        semanticFormatterCallback: (_) => '$scaleValue%',
+        thumbText: '$scaleValue%',
+        // Use a wide range of divisions (calculated as (CustomScaleControls.maxPercent - CustomScaleControls.minPercent)) to provide ~1% precision increments.
+        // This allows users to set precise scale values. Lower values would require more fine-tuning via the +/- buttons, which is undesirable for big ranges.
+        divisions:
+            (CustomScaleControls.maxPercent - CustomScaleControls.minPercent)
+                .round(),
+        onChanged: onSliderChanged,
       ),
     );
 
@@ -3491,18 +3491,17 @@ class EdgeThicknessControl extends StatelessWidget {
           unit: 'px',
         ),
       ),
-      child: Semantics(
-        value: value.toInt().toString(),
-        child: Slider(
-          value: value,
-          min: EdgeThicknessControl.kMin,
-          max: EdgeThicknessControl.kMax,
-          divisions:
-              (EdgeThicknessControl.kMax - EdgeThicknessControl.kMin).round(),
-          semanticFormatterCallback: (double newValue) =>
-              "${newValue.round()}px",
-          onChanged: onChanged,
-        ),
+      child: SafeSlider(
+        value: value,
+        min: EdgeThicknessControl.kMin,
+        max: EdgeThicknessControl.kMax,
+        semanticLabel: translate('Edge thickness'),
+        thumbText: '${value.round()}px',
+        divisions:
+            (EdgeThicknessControl.kMax - EdgeThicknessControl.kMin).round(),
+        semanticFormatterCallback: (double newValue) =>
+            "${newValue.round()}px",
+        onChanged: onChanged,
       ),
     );
 

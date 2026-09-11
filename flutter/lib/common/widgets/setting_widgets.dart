@@ -1,6 +1,7 @@
 import 'package:debounce_throttle/debounce_throttle.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/common/widgets/safe_slider.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
@@ -36,10 +37,11 @@ Widget customImageQualityWidget({
           children: [
             Expanded(
               flex: 3,
-              child: Slider(
+              child: SafeSlider(
                 value: quality,
                 min: kMinQuality,
                 max: moreQuality ? kMaxMoreQuality : kMaxQuality,
+                semanticLabel: translate('Bitrate'),
                 divisions: moreQuality
                     ? ((kMaxMoreQuality - kMinQuality) / 10).round()
                     : ((kMaxQuality - kMinQuality) / 5).round(),
@@ -110,10 +112,11 @@ Widget customImageQualityWidget({
             children: [
               Expanded(
                 flex: 3,
-                child: Slider(
+                child: SafeSlider(
                   value: fps,
                   min: kMinFps,
                   max: kMaxFps,
+                  semanticLabel: translate('FPS'),
                   divisions: ((kMaxFps - kMinFps) / 5).round(),
                   onChanged: setFps == null
                       ? null
@@ -248,10 +251,11 @@ class _TrackpadSpeedWidgetState extends State<TrackpadSpeedWidget> {
         children: [
           Expanded(
             flex: 3,
-            child: Slider(
+            child: SafeSlider(
               value: value.toDouble(),
               min: kMinTrackpadSpeed.toDouble(),
               max: kMaxTrackpadSpeed.toDouble(),
+              semanticLabel: translate('Trackpad speed'),
               divisions: ((kMaxTrackpadSpeed - kMinTrackpadSpeed) / 10).round(),
               onChanged: (value) => updateValue(value.round()),
             ),
