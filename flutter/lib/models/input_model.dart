@@ -1190,10 +1190,10 @@ class InputModel {
     }
   }
 
-  /// Send mouse movement event with distance in [x] and [y]. The
-  /// coordinates are in the displayed (virtual) rect space; they are mapped
-  /// back to the base (remote) display space when client-side rotation is
-  /// active.
+  /// Send mouse movement event with distance in [x] and [y]. The coordinates
+  /// are in the displayed (virtual) rect space, which for the targeted
+  /// hardware-rotated panels is the peer's pointer space, so they are sent
+  /// as-is (see [_rotatePointToBase]).
   Future<void> moveMouse(double x, double y) async {
     if (!keyboardPerm) return;
     if (isViewCamera) return;

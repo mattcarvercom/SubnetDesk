@@ -3433,27 +3433,10 @@ class CursorModel with ChangeNotifier {
     }
   }
 
-  /// When client-side rotation is active, map a remote (base) cursor
-  /// position into the displayed (virtual) coordinate space. Returns null
-  /// when no rotation is active or the display rect is unknown.
-  Offset? _toVirtualCursorPos(double x, double y) {
-    final ffiModel = parent.target?.ffiModel;
-    if (ffiModel == null) {
-      return null;
-    }
-    final rotation = ffiModel.clientRotationValue;
-    if (rotation == ViewRotation.none) {
-      return null;
-    }
-    final base = ffiModel.baseRect;
-    if (base == null) {
-      return null;
-    }
-    final v = rotation.toVirtual(Offset(x - base.left, y - base.top), base.size);
-    return Offset(base.left + v.dx, base.top + v.dy);
-  }
-
-  /// Update the cursor position.
+  /// Update the cursor position. The peer reports the cursor in the same
+  /// pointer space input is sent in (see [ViewRotation]), so with client-side
+  /// rotation active the report is already in the displayed space and is
+  /// stored as-is.
   updateCursorPosition(Map<String, dynamic> evt, String id) async {
     if (!isConnIn2Secs()) {
       gotMouseControl = false;
@@ -3461,11 +3444,6 @@ class CursorModel with ChangeNotifier {
     }
     _x = double.parse(evt['x']);
     _y = double.parse(evt['y']);
-    final virtual = _toVirtualCursorPos(_x, _y);
-    if (virtual != null) {
-      _x = virtual.dx;
-      _y = virtual.dy;
-    }
     try {
       RemoteCursorMovedState.find(id).value = true;
     } catch (e) {
@@ -3478,26 +3456,9 @@ class CursorModel with ChangeNotifier {
     _displayOriginX = x;
     _displayOriginY = y;
     if (updateCursorPos) {
-      // The stored cursor position is in the displayed (virtual) space.
-      var nx = x + 1;
-      var ny = y + 1;
-      final virtualPos = _toVirtualCursorPos(nx, ny);
-      if (virtualPos != null) {
-        nx = virtualPos.dx;
-        ny = virtualPos.dy;
-      }
-      _x = nx;
-      _y = ny;
-      // [moveMouse] inverse-maps virtual coordinates back to the base space,
-      // so convert the base origin first to keep it unchanged.
-      var ox = x;
-      var oy = y;
-      final virtual = _toVirtualCursorPos(ox, oy);
-      if (virtual != null) {
-        ox = virtual.dx;
-        oy = virtual.dy;
-      }
-      parent.target?.inputModel.moveMouse(ox, oy);
+      _x = x + 1;
+      _y = y + 1;
+      parent.target?.inputModel.moveMouse(x, y);
     }
     parent.target?.canvasModel.resetOffset();
     notifyListeners();
@@ -3513,21 +3474,7 @@ class CursorModel with ChangeNotifier {
     _displayOriginY = y;
     _x = xCursor;
     _y = yCursor;
-    final virtual = _toVirtualCursorPos(_x, _y);
-    if (virtual != null) {
-      _x = virtual.dx;
-      _y = virtual.dy;
-    }
-    // [moveMouse] inverse-maps virtual coordinates back to the base space,
-    // so convert the base origin first to keep it unchanged.
-    var ox = x;
-    var oy = y;
-    final virtualOrigin = _toVirtualCursorPos(ox, oy);
-    if (virtualOrigin != null) {
-      ox = virtualOrigin.dx;
-      oy = virtualOrigin.dy;
-    }
-    parent.target?.inputModel.moveMouse(ox, oy);
+    parent.target?.inputModel.moveMouse(x, y);
     notifyListeners();
   }
 
