@@ -1000,19 +1000,24 @@ class _ImagePaintState extends State<ImagePaint> {
   MouseCursor _buildCustomCursor(BuildContext context, double scale) {
     final cursor = Provider.of<CursorModel>(context);
     final cache = cursor.cache ?? preDefaultCursor.cache;
-    // The remote view may be client-side rotated, so the local pointer glyph
-    // (a mirror of the remote cursor) has to be rotated the same way.
+    // The peer cursor image is in the panel orientation, so the local pointer
+    // glyph must be rotated by the difference between the displayed view and
+    // the panel orientation.
+    final ffiModel = widget.ffi.ffiModel;
     return buildCursorOfCache(
         cursor, scale, cache,
-        rotation: widget.ffi.ffiModel.clientRotationValue);
+        rotation:
+            ffiModel.panelRotationValue.difference(ffiModel.clientRotationValue));
   }
 
   MouseCursor _buildDisabledCursor(BuildContext context, double scale) {
     final cursor = Provider.of<CursorModel>(context);
     final cache = preForbiddenCursor.cache;
+    final ffiModel = widget.ffi.ffiModel;
     return buildCursorOfCache(
         cursor, scale, cache,
-        rotation: widget.ffi.ffiModel.clientRotationValue);
+        rotation:
+            ffiModel.panelRotationValue.difference(ffiModel.clientRotationValue));
   }
 
   Widget _buildCrossScrollbarFromLayout(
@@ -1151,7 +1156,10 @@ class CursorPaint extends StatelessWidget {
     }
 
     final ffiModel = c.parent.target!.ffiModel;
-    final rotation = ffiModel.clientRotationValue;
+    // The peer cursor image is in the panel orientation; rotate it by the
+    // difference between the displayed view and the panel orientation.
+    final rotation =
+        ffiModel.panelRotationValue.difference(ffiModel.clientRotationValue);
     final cursorImage = m.image ?? preDefaultCursor.image;
 
     // The hotspot of the glyph as drawn, rotated together with the glyph so

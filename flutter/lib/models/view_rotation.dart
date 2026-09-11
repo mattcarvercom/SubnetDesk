@@ -75,6 +75,26 @@ enum ViewRotation {
     }
   }
 
+  /// The clockwise rotation that takes this rotation to [other], as a
+  /// [ViewRotation]. Used to orient content that lives in this rotation's
+  /// space (for example the peer's panel-space cursor) in [other]'s space.
+  ViewRotation difference(ViewRotation other) =>
+      ViewRotation.values[((other.index - index) % 4 + 4) % 4];
+
+  /// Rotate a direction vector by [quarterTurns] clockwise quarter turns.
+  static Offset rotateDeltaCW(Offset delta, int quarterTurns) {
+    switch (quarterTurns % 4) {
+      case 1:
+        return Offset(-delta.dy, delta.dx);
+      case 2:
+        return Offset(-delta.dx, -delta.dy);
+      case 3:
+        return Offset(delta.dy, -delta.dx);
+      default:
+        return delta;
+    }
+  }
+
   /// Rotate the hotspot of a cursor glyph drawn in a [cursorW]x[cursorH]
   /// cursor image, matching a glyph rotated by this rotation.
   Offset rotateHotspot(double cursorW, double cursorH, Offset hotspot) {

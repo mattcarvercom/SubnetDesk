@@ -1098,24 +1098,39 @@ class InputModel {
     await sendMouse('up', button);
   }
 
-  /// When client-side view rotation is active, input points arrive in the
-  /// displayed (virtual) rect space. For the hardware-rotated panels this
-  /// feature targets, that space is the peer's pointer space: the compositor
-  /// reports its logical desktop in the displayed orientation, and the peer's
-  /// uinput range and layout remap are derived from it, while the advertised
-  /// base frame is the panel-rotated one. The point is therefore sent as-is,
-  /// so the server injects it unchanged and needs no knowledge of the
-  /// rotation (works with any SubnetDesk server).
+  /// Input points arrive in the displayed (virtual) rect space. The peer
+  /// injects them in its pointer space, which for the targeted
+  /// hardware-rotated panels is the orientation set by the panel rotation:
+  /// the compositor reports its logical desktop and the peer's uinput range
+  /// and layout remap are derived from it, while the advertised base frame is
+  /// the panel-rotated one. Map the point into that space so the peer injects
+  /// it unchanged and needs no knowledge of the client-side rotation (works
+  /// with any SubnetDesk server). No-op when the view follows the panel.
   Point? _rotatePointToBase(Point? p) {
-    return p;
+    if (p == null) {
+      return null;
+    }
+    final ffiModel = parent.target?.ffiModel;
+    if (ffiModel == null) {
+      return p;
+    }
+    final num px = p.x;
+    final num py = p.y;
+    final q = ffiModel.displayedToPanelPoint(Offset(px.toDouble(), py.toDouble()));
+    return Point(q.dx, q.dy);
   }
 
-  /// Direction vectors (scroll / trackpad / relative / fling deltas) arrive in
-  /// the displayed (virtual) space, which for the targeted hardware-rotated
-  /// panels is the peer's pointer space. Send them unchanged (see
-  /// [_rotatePointToBase]).
+  /// Direction vectors (scroll / trackpad / relative / fling deltas) arrive
+  /// in the displayed (virtual) space; rotate them from the view rotation to
+  /// the panel orientation (see [_rotatePointToBase]).
   Offset _rotateDeltaToBase(Offset delta) {
-    return delta;
+    final ffiModel = parent.target?.ffiModel;
+    if (ffiModel == null) {
+      return delta;
+    }
+    final diff =
+        ffiModel.clientRotationValue.difference(ffiModel.panelRotationValue);
+    return ViewRotation.rotateDeltaCW(delta, diff.index);
   }
 
   /// Send scroll event with scroll distance [y].
@@ -1914,22 +1929,6 @@ class InputModel {
     var basePos = _rotatePointToBase(pos);
     if (basePos == null) {
       return null;
-    }
-    // View-only with "Show my cursor": the peer draws the viewer's cursor on
-    // its own display through the whiteboard overlay, which lives in the
-    // peer's frame space. Map the displayed point back to the frame space so
-    // the overlay lands where the viewer points (no-op without rotation).
-    if (isViewOnly && showMyCursor) {
-      final ffiModel = parent.target?.ffiModel;
-      final rotation = ffiModel?.clientRotationValue ?? ViewRotation.none;
-      final base = ffiModel?.baseRect;
-      if (base != null && rotation != ViewRotation.none) {
-        final p = rotation.toBase(
-            Offset(basePos.x.toDouble() - base.left,
-                basePos.y.toDouble() - base.top),
-            base.size);
-        basePos = Point(p.dx + base.left, p.dy + base.top);
-      }
     }
     if (type != '') {
       evt['x'] = '0';

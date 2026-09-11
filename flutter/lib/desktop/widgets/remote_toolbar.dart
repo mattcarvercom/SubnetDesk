@@ -1756,7 +1756,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           ),
         if (ffi.connType == ConnType.defaultConn &&
             ffiModel.clientRotationSupported)
-          viewRotation(),
+          rotation(),
         if (showVirtualDisplayMenu(ffi) && ffi.connType == ConnType.defaultConn)
           _SubmenuButton(
             ffi: widget.ffi,
@@ -1955,54 +1955,73 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     });
   }
 
-  /// Client-side view rotation. Only local: the remote display is never
-  /// rotated. Shown for single-display sessions (for example a tablet with
-  /// a physically rotated panel that reports "normal" orientation to the
-  /// compositor).
-  viewRotation() {
+  /// Client-side view and panel rotation. Both are local: the remote display
+  /// is never rotated. Shown for single-display sessions (for example a
+  /// tablet with a physically rotated panel that reports "normal" orientation
+  /// to the compositor). The view rotation only changes how the frame is
+  /// drawn; the panel orientation is the peer's pointer space and is used for
+  /// input, so the two can differ.
+  rotation() {
     return Obx(() {
-      final value = ffiModel.clientRotation.value.toString();
+      final viewValue = 'view:${ffiModel.clientRotation.value}';
+      final panelValue = 'panel:${ffiModel.panelRotation.value}';
+      Widget groupLabel(String key) => MenuButton(
+            child: Text(
+              translate(key),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          );
       return _SubmenuButton(
         ffi: widget.ffi,
-        child: Text(translate('View rotation')),
+        child: Text(translate('Rotation')),
         menuChildren: [
-          RdoMenuButton<String>(
-            value: '0',
-            groupValue: value,
-            onChanged: _changeViewRotation,
-            child: Text(translate('No rotation')),
-            ffi: ffi,
-          ),
-          RdoMenuButton<String>(
-            value: '90',
-            groupValue: value,
-            onChanged: _changeViewRotation,
-            child: Text(translate('Rotate 90° clockwise')),
-            ffi: ffi,
-          ),
-          RdoMenuButton<String>(
-            value: '180',
-            groupValue: value,
-            onChanged: _changeViewRotation,
-            child: Text(translate('Rotate 180°')),
-            ffi: ffi,
-          ),
-          RdoMenuButton<String>(
-            value: '270',
-            groupValue: value,
-            onChanged: _changeViewRotation,
-            child: Text(translate('Rotate 270° clockwise')),
-            ffi: ffi,
-          ),
+          groupLabel('View'),
+          for (final angle in const [0, 90, 180, 270])
+            RdoMenuButton<String>(
+              value: 'view:$angle',
+              groupValue: viewValue,
+              onChanged: _changeViewRotation,
+              child: Text(translate(_rotationLabel(angle))),
+              ffi: ffi,
+            ),
+          Divider(),
+          groupLabel('Panel'),
+          for (final angle in const [0, 90, 180, 270])
+            RdoMenuButton<String>(
+              value: 'panel:$angle',
+              groupValue: panelValue,
+              onChanged: _changePanelRotation,
+              child: Text(translate(_rotationLabel(angle))),
+              ffi: ffi,
+            ),
         ],
       );
     });
   }
 
-  void _changeViewRotation(String? value) {
-    final v = int.tryParse(value ?? '0') ?? 0;
-    ffiModel.setClientRotation(v);
+  static String _rotationLabel(int angle) {
+    switch (angle) {
+      case 90:
+        return 'Rotate 90° clockwise';
+      case 180:
+        return 'Rotate 180°';
+      case 270:
+        return 'Rotate 270° clockwise';
+      default:
+        return 'No rotation';
+    }
   }
+
+  void _changeViewRotation(String? value) {
+    ffiModel.setClientRotation(_rotationFromValue(value));
+  }
+
+  void _changePanelRotation(String? value) {
+    ffiModel.setPanelRotation(_rotationFromValue(value));
+  }
+
+  static int _rotationFromValue(String? value) =>
+      int.tryParse(value?.split(':').last ?? '0') ?? 0;
 
   imageQuality() {
     return futureBuilder(
