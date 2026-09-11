@@ -25,6 +25,7 @@ import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'common.dart';
+import 'common/diagnostics.dart';
 import 'common/platform_font_fallback.dart';
 import 'consts.dart';
 import 'mobile/pages/home_page.dart';
@@ -48,6 +49,8 @@ Future<void> main(List<String> args) async {
     runApp(const MaterialApp(home: _LanOnlyWebUnavailablePage()));
     return;
   }
+
+  Diagnostics.install();
 
   // Launch arguments can contain LAN credentials for a newly-created session.
   // Never log their contents, including in debug builds.
@@ -136,6 +139,7 @@ class _LanOnlyWebUnavailablePage extends StatelessWidget {
 Future<void> initEnv(String appType) async {
   // global shared preference
   await platformFFI.init(appType);
+  Diagnostics.ready();
   // global FFI, use this **ONLY** for global configuration
   // for convenience, use global FFI on mobile platform
   // focus on multi-ffi on desktop first

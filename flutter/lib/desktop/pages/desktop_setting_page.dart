@@ -1186,6 +1186,8 @@ class _AboutState extends State<_About> {
   late final Future<Map<String, String>> _aboutInfo;
   Map<String, dynamic> _updateState = const {};
   bool _updateActionPending = false;
+  bool _exportPending = false;
+  String _exportStatus = '';
 
   @override
   void initState() {
@@ -1225,6 +1227,71 @@ class _AboutState extends State<_About> {
       platformFFI.unregisterEventHandler(_updateEvent, _updateHandler);
     }
     super.dispose();
+  }
+
+  Future<void> _exportDiagnostics() async {
+    if (_exportPending) return;
+    setState(() {
+      _exportPending = true;
+      _exportStatus = '';
+    });
+    try {
+      final path = await FilePicker.saveFile(
+        dialogTitle: translate('Export diagnostic bundle'),
+        fileName:
+            'SubnetDesk-diagnostics-${DateTime.now().millisecondsSinceEpoch}.zip',
+        allowedExtensions: ['zip'],
+        type: FileType.custom,
+      );
+      if (path == null) return;
+      final destination = path;
+      final error = await bind.mainExportDiagnostics(
+        request: jsonEncode({
+          'path': destination,
+          'system': Platform.operatingSystemVersion,
+        }),
+      );
+      if (mounted) {
+        setState(
+          () => _exportStatus = error.isEmpty
+              ? '${translate('Successful')}: $destination'
+              : '${translate('Failed')}: $error',
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _exportStatus = '${translate('Failed')}: $error');
+      }
+    } finally {
+      if (mounted) setState(() => _exportPending = false);
+    }
+  }
+
+  Widget _diagnosticsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 28),
+        Text(translate('Diagnostic bundle description')),
+        const SizedBox(height: 8),
+        ElevatedButton.icon(
+          onPressed: _exportPending ? null : _exportDiagnostics,
+          icon: _exportPending
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.download),
+          label: Text(translate('Export diagnostic bundle')),
+        ),
+        if (_exportStatus.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: SelectableText(_exportStatus),
+          ),
+      ],
+    );
   }
 
   Future<void> _runUpdateAction(Future<String> Function() action) async {
@@ -1434,6 +1501,7 @@ class _AboutState extends State<_About> {
                       ).marginSymmetric(vertical: 4.0),
                     ),
                   if (isWindows || isMacOS) _softwareUpdateSection(),
+                  if (!isWeb) _diagnosticsSection(),
                   Container(
                     decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
                     padding: const EdgeInsets.symmetric(

@@ -16,6 +16,8 @@ mod client;
 pub mod common;
 #[cfg(not(any(target_os = "ios")))]
 pub mod ipc;
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+mod diagnostics;
 mod lan;
 mod lan_identity;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

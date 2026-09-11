@@ -1,6 +1,8 @@
 lazy_static::lazy_static! {
 pub static ref T: std::collections::HashMap<&'static str, &'static str> =
     [
+        ("Export diagnostic bundle", "匯出診斷包"),
+        ("Diagnostic bundle description", "匯出最近 7 天的日誌和版本資訊，用於提交問題回報。會嘗試隱藏常見敏感資訊，請在公開上傳前檢查診斷包內容。"),
         ("Status", "狀態"),
         ("Your Desktop", "您的桌面"),
         ("desk_tip", "您可以透過此 ID 及密碼存取您的桌面"),

@@ -1,6 +1,7 @@
 lazy_static::lazy_static! {
 pub static ref T: std::collections::HashMap<&'static str, &'static str> =
     [
+        ("Diagnostic bundle description", "Export logs from the last 7 days and version information for an issue report. Common sensitive information is redacted where possible; review the bundle before sharing publicly."),
         ("desk_tip", "Your desktop can be accessed with this ID and password."),
         ("connecting_status", "Connecting to the RustDesk network..."),
         ("not_ready_status", "Not ready. Please check your connection"),

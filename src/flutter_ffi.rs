@@ -1044,6 +1044,21 @@ pub fn main_uri_prefix_sync() -> SyncReturn<String> {
     SyncReturn(crate::get_uri_prefix())
 }
 
+/// Runs on the bridge worker pool, keeping ZIP I/O off the UI thread.
+pub fn main_export_diagnostics(request: String) -> String {
+    crate::diagnostics::export(&request)
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default()
+}
+
+pub fn main_record_flutter_error(message: String) -> String {
+    crate::diagnostics::record_flutter_error(&message)
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default()
+}
+
 pub fn main_get_version() -> String {
     get_version()
 }
