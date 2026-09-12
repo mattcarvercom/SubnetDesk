@@ -103,6 +103,11 @@ pub struct Server {
     connections: ConnMap,
     services: HashMap<String, Box<dyn Service>>,
     id_count: i32,
+    // Which connection ids were added as screen/monitor viewers (as opposed
+    // to camera-only connections), so `remove_connection` can tell whether a
+    // disconnecting connection should affect display power-save state at all.
+    #[cfg(target_os = "linux")]
+    monitor_conn_ids: std::collections::HashSet<i32>,
 }
 
 pub type ServerPtr = Arc<RwLock<Server>>;
@@ -113,6 +118,8 @@ pub fn new() -> ServerPtr {
         connections: HashMap::new(),
         services: HashMap::new(),
         id_count: hbb_common::rand::random::<i32>() % 1000 + 1000, // ensure positive
+        #[cfg(target_os = "linux")]
+        monitor_conn_ids: Default::default(),
     };
     server.add_service(Box::new(audio_service::new()));
     #[cfg(not(target_os = "ios"))]
@@ -235,6 +242,16 @@ impl Server {
         }
         #[cfg(target_os = "macos")]
         self.update_enable_retina();
+        // A locked-and-powered-down screen (e.g. a user's own power-save
+        // script) has no frames to capture; wake it so this connection
+        // actually gets an image instead of hanging on "waiting for
+        // image..." forever. See dbus::wake_display_if_locked for details.
+        #[cfg(target_os = "linux")]
+        {
+            self.monitor_conn_ids.insert(conn.id());
+            dbus::note_monitor_connected();
+            dbus::wake_display_if_locked();
+        }
         self.connections.insert(conn.id(), conn);
     }
 
@@ -245,6 +262,14 @@ impl Server {
         self.connections.remove(&conn.id());
         #[cfg(target_os = "macos")]
         self.update_enable_retina();
+        // Restore the power-saving behavior once no monitor viewers remain
+        // (a camera-only connection never wakes the display, so it should
+        // never trigger a re-blank either), if the screen is still locked.
+        // See dbus::reblank_display_if_still_locked.
+        #[cfg(target_os = "linux")]
+        if self.monitor_conn_ids.remove(&conn.id()) && dbus::note_monitor_disconnected() <= 0 {
+            dbus::reblank_display_if_still_locked();
+        }
     }
 
     pub fn close_connections(&mut self) {
