@@ -795,17 +795,6 @@ export interface VideoFrame {
   display: number;
 }
 
-export interface IdPk {
-  id: string;
-  pk: Uint8Array;
-  /**
-   * DTLS certificate fingerprint of the signer's WebRTC endpoint, signed together with id/pk so
-   * a WebRTC peer's DTLS channel can be bound to its verified identity (defeats a rendezvous/relay
-   * that swaps SDP fingerprints). Empty for non-WebRTC handshakes.
-   */
-  dtls_fingerprint: string;
-}
-
 export interface DisplayInfo {
   x: number;
   y: number;
@@ -845,6 +834,12 @@ export interface LanClientHello {
   protocol_version: number;
   client_nonce: Uint8Array;
   client_capabilities: bigint;
+  /**
+   * Empty when the client does not want a WebRTC transport. The server answers
+   * by putting its SDP answer in LanServerHello.webrtc_sdp_answer and binding
+   * it into the handshake signature.
+   */
+  webrtc_sdp_offer: string;
 }
 
 export interface LanServerHello {
@@ -853,12 +848,36 @@ export interface LanServerHello {
   device_public_key: Uint8Array;
   ephemeral_public_key: Uint8Array;
   signature: Uint8Array;
+  /**
+   * Empty when no offer was sent. Non-empty values are covered by the
+   * handshake transcript, so the device key authenticates the answer.
+   */
+  webrtc_sdp_answer: string;
 }
 
 export interface LanLoginRequest {
   access_username: string;
   access_password: Uint8Array;
   credential_revision_hint: bigint;
+}
+
+/**
+ * Trickled ICE candidate exchanged over the secured LAN stream while the two
+ * ends race the WebRTC connection against the TCP transport.
+ */
+export interface WebrtcIce {
+  session_key: string;
+  candidate: string;
+}
+
+/**
+ * Transport decision sent by the side that adopted WebRTC, immediately before it
+ * drops the secured LAN stream. The peer's race must take it as the authoritative
+ * WebRTC win instead of misreading the imminent stream close as a TCP fallback.
+ * Carries the same session key as the WebrtcIce messages on this stream.
+ */
+export interface WebrtcTransportDecision {
+  session_key: string;
 }
 
 export interface LoginRequest {
@@ -1157,11 +1176,6 @@ export interface FileTransferSendRequest {
 
 export enum FileTransferSendRequest_FileType {
   Generic = 0,
-  /**
-   * Printer - Retained for wire compatibility with older clients. New clients ignore it.
-   *
-   * @deprecated
-   */
   Printer = 1,
   UNRECOGNIZED = -1,
 }
@@ -1592,7 +1606,7 @@ export interface MessageBox {
   /**
    * If not empty, msgbox provides a button to following the link.
    * The link here can't be directly http url.
-   * It must be the key of http url configured in peer side or "subnetdesk://*" (jump in app).
+   * It must be the key of http url configed in peer side or "rustdesk://*" (jump in app).
    */
   link: string;
 }
@@ -2012,6 +2026,8 @@ export interface Message {
   lan_client_hello?: LanClientHello | undefined;
   lan_server_hello?: LanServerHello | undefined;
   port_forward_channel?: PortForwardChannel | undefined;
+  webrtc_ice?: WebrtcIce | undefined;
+  webrtc_transport_decision?: WebrtcTransportDecision | undefined;
 }
 
 function createBaseEncodedVideoFrame(): EncodedVideoFrame {
@@ -2492,98 +2508,6 @@ export const VideoFrame: MessageFns<VideoFrame> = {
       ? EncodedVideoFrames.fromPartial(object.av1s)
       : undefined;
     message.display = object.display ?? 0;
-    return message;
-  },
-};
-
-function createBaseIdPk(): IdPk {
-  return { id: "", pk: new Uint8Array(0), dtls_fingerprint: "" };
-}
-
-export const IdPk: MessageFns<IdPk> = {
-  encode(message: IdPk, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.id !== "") {
-      writer.uint32(10).string(message.id);
-    }
-    if (message.pk.length !== 0) {
-      writer.uint32(18).bytes(message.pk);
-    }
-    if (message.dtls_fingerprint !== "") {
-      writer.uint32(26).string(message.dtls_fingerprint);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): IdPk {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseIdPk();
-    while (reader.pos < end) {
-      const tag = reader.uint32();
-      switch (tag >>> 3) {
-        case 1: {
-          if (tag !== 10) {
-            break;
-          }
-
-          message.id = reader.string();
-          continue;
-        }
-        case 2: {
-          if (tag !== 18) {
-            break;
-          }
-
-          message.pk = reader.bytes();
-          continue;
-        }
-        case 3: {
-          if (tag !== 26) {
-            break;
-          }
-
-          message.dtls_fingerprint = reader.string();
-          continue;
-        }
-      }
-      if ((tag & 7) === 4 || tag === 0) {
-        break;
-      }
-      reader.skip(tag & 7);
-    }
-    return message;
-  },
-
-  fromJSON(object: any): IdPk {
-    return {
-      id: isSet(object.id) ? globalThis.String(object.id) : "",
-      pk: isSet(object.pk) ? bytesFromBase64(object.pk) : new Uint8Array(0),
-      dtls_fingerprint: isSet(object.dtls_fingerprint) ? globalThis.String(object.dtls_fingerprint) : "",
-    };
-  },
-
-  toJSON(message: IdPk): unknown {
-    const obj: any = {};
-    if (message.id !== "") {
-      obj.id = message.id;
-    }
-    if (message.pk.length !== 0) {
-      obj.pk = base64FromBytes(message.pk);
-    }
-    if (message.dtls_fingerprint !== "") {
-      obj.dtls_fingerprint = message.dtls_fingerprint;
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<IdPk>, I>>(base?: I): IdPk {
-    return IdPk.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<IdPk>, I>>(object: I): IdPk {
-    const message = createBaseIdPk();
-    message.id = object.id ?? "";
-    message.pk = object.pk ?? new Uint8Array(0);
-    message.dtls_fingerprint = object.dtls_fingerprint ?? "";
     return message;
   },
 };
@@ -3078,7 +3002,7 @@ export const OSLogin: MessageFns<OSLogin> = {
 };
 
 function createBaseLanClientHello(): LanClientHello {
-  return { protocol_version: 0, client_nonce: new Uint8Array(0), client_capabilities: 0n };
+  return { protocol_version: 0, client_nonce: new Uint8Array(0), client_capabilities: 0n, webrtc_sdp_offer: "" };
 }
 
 export const LanClientHello: MessageFns<LanClientHello> = {
@@ -3094,6 +3018,9 @@ export const LanClientHello: MessageFns<LanClientHello> = {
         throw new globalThis.Error("value provided for field message.client_capabilities of type uint64 too large");
       }
       writer.uint32(24).uint64(message.client_capabilities);
+    }
+    if (message.webrtc_sdp_offer !== "") {
+      writer.uint32(34).string(message.webrtc_sdp_offer);
     }
     return writer;
   },
@@ -3129,6 +3056,14 @@ export const LanClientHello: MessageFns<LanClientHello> = {
           message.client_capabilities = reader.uint64() as bigint;
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.webrtc_sdp_offer = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3143,6 +3078,7 @@ export const LanClientHello: MessageFns<LanClientHello> = {
       protocol_version: isSet(object.protocol_version) ? globalThis.Number(object.protocol_version) : 0,
       client_nonce: isSet(object.client_nonce) ? bytesFromBase64(object.client_nonce) : new Uint8Array(0),
       client_capabilities: isSet(object.client_capabilities) ? BigInt(object.client_capabilities) : 0n,
+      webrtc_sdp_offer: isSet(object.webrtc_sdp_offer) ? globalThis.String(object.webrtc_sdp_offer) : "",
     };
   },
 
@@ -3157,6 +3093,9 @@ export const LanClientHello: MessageFns<LanClientHello> = {
     if (message.client_capabilities !== 0n) {
       obj.client_capabilities = message.client_capabilities.toString();
     }
+    if (message.webrtc_sdp_offer !== "") {
+      obj.webrtc_sdp_offer = message.webrtc_sdp_offer;
+    }
     return obj;
   },
 
@@ -3168,6 +3107,7 @@ export const LanClientHello: MessageFns<LanClientHello> = {
     message.protocol_version = object.protocol_version ?? 0;
     message.client_nonce = object.client_nonce ?? new Uint8Array(0);
     message.client_capabilities = object.client_capabilities ?? 0n;
+    message.webrtc_sdp_offer = object.webrtc_sdp_offer ?? "";
     return message;
   },
 };
@@ -3179,6 +3119,7 @@ function createBaseLanServerHello(): LanServerHello {
     device_public_key: new Uint8Array(0),
     ephemeral_public_key: new Uint8Array(0),
     signature: new Uint8Array(0),
+    webrtc_sdp_answer: "",
   };
 }
 
@@ -3198,6 +3139,9 @@ export const LanServerHello: MessageFns<LanServerHello> = {
     }
     if (message.signature.length !== 0) {
       writer.uint32(42).bytes(message.signature);
+    }
+    if (message.webrtc_sdp_answer !== "") {
+      writer.uint32(50).string(message.webrtc_sdp_answer);
     }
     return writer;
   },
@@ -3249,6 +3193,14 @@ export const LanServerHello: MessageFns<LanServerHello> = {
           message.signature = reader.bytes();
           continue;
         }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.webrtc_sdp_answer = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3269,6 +3221,7 @@ export const LanServerHello: MessageFns<LanServerHello> = {
         ? bytesFromBase64(object.ephemeral_public_key)
         : new Uint8Array(0),
       signature: isSet(object.signature) ? bytesFromBase64(object.signature) : new Uint8Array(0),
+      webrtc_sdp_answer: isSet(object.webrtc_sdp_answer) ? globalThis.String(object.webrtc_sdp_answer) : "",
     };
   },
 
@@ -3289,6 +3242,9 @@ export const LanServerHello: MessageFns<LanServerHello> = {
     if (message.signature.length !== 0) {
       obj.signature = base64FromBytes(message.signature);
     }
+    if (message.webrtc_sdp_answer !== "") {
+      obj.webrtc_sdp_answer = message.webrtc_sdp_answer;
+    }
     return obj;
   },
 
@@ -3302,6 +3258,7 @@ export const LanServerHello: MessageFns<LanServerHello> = {
     message.device_public_key = object.device_public_key ?? new Uint8Array(0);
     message.ephemeral_public_key = object.ephemeral_public_key ?? new Uint8Array(0);
     message.signature = object.signature ?? new Uint8Array(0);
+    message.webrtc_sdp_answer = object.webrtc_sdp_answer ?? "";
     return message;
   },
 };
@@ -3399,6 +3356,140 @@ export const LanLoginRequest: MessageFns<LanLoginRequest> = {
     message.access_username = object.access_username ?? "";
     message.access_password = object.access_password ?? new Uint8Array(0);
     message.credential_revision_hint = object.credential_revision_hint ?? 0n;
+    return message;
+  },
+};
+
+function createBaseWebrtcIce(): WebrtcIce {
+  return { session_key: "", candidate: "" };
+}
+
+export const WebrtcIce: MessageFns<WebrtcIce> = {
+  encode(message: WebrtcIce, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.session_key !== "") {
+      writer.uint32(10).string(message.session_key);
+    }
+    if (message.candidate !== "") {
+      writer.uint32(18).string(message.candidate);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WebrtcIce {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseWebrtcIce();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.session_key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.candidate = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): WebrtcIce {
+    return {
+      session_key: isSet(object.session_key) ? globalThis.String(object.session_key) : "",
+      candidate: isSet(object.candidate) ? globalThis.String(object.candidate) : "",
+    };
+  },
+
+  toJSON(message: WebrtcIce): unknown {
+    const obj: any = {};
+    if (message.session_key !== "") {
+      obj.session_key = message.session_key;
+    }
+    if (message.candidate !== "") {
+      obj.candidate = message.candidate;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<WebrtcIce>, I>>(base?: I): WebrtcIce {
+    return WebrtcIce.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<WebrtcIce>, I>>(object: I): WebrtcIce {
+    const message = createBaseWebrtcIce();
+    message.session_key = object.session_key ?? "";
+    message.candidate = object.candidate ?? "";
+    return message;
+  },
+};
+
+function createBaseWebrtcTransportDecision(): WebrtcTransportDecision {
+  return { session_key: "" };
+}
+
+export const WebrtcTransportDecision: MessageFns<WebrtcTransportDecision> = {
+  encode(message: WebrtcTransportDecision, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.session_key !== "") {
+      writer.uint32(10).string(message.session_key);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WebrtcTransportDecision {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseWebrtcTransportDecision();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.session_key = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): WebrtcTransportDecision {
+    return { session_key: isSet(object.session_key) ? globalThis.String(object.session_key) : "" };
+  },
+
+  toJSON(message: WebrtcTransportDecision): unknown {
+    const obj: any = {};
+    if (message.session_key !== "") {
+      obj.session_key = message.session_key;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<WebrtcTransportDecision>, I>>(base?: I): WebrtcTransportDecision {
+    return WebrtcTransportDecision.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<WebrtcTransportDecision>, I>>(object: I): WebrtcTransportDecision {
+    const message = createBaseWebrtcTransportDecision();
+    message.session_key = object.session_key ?? "";
     return message;
   },
 };
@@ -14370,6 +14461,8 @@ function createBaseMessage(): Message {
     lan_client_hello: undefined,
     lan_server_hello: undefined,
     port_forward_channel: undefined,
+    webrtc_ice: undefined,
+    webrtc_transport_decision: undefined,
   };
 }
 
@@ -14476,6 +14569,12 @@ export const Message: MessageFns<Message> = {
     }
     if (message.port_forward_channel !== undefined) {
       PortForwardChannel.encode(message.port_forward_channel, writer.uint32(282).fork()).join();
+    }
+    if (message.webrtc_ice !== undefined) {
+      WebrtcIce.encode(message.webrtc_ice, writer.uint32(290).fork()).join();
+    }
+    if (message.webrtc_transport_decision !== undefined) {
+      WebrtcTransportDecision.encode(message.webrtc_transport_decision, writer.uint32(298).fork()).join();
     }
     return writer;
   },
@@ -14751,6 +14850,22 @@ export const Message: MessageFns<Message> = {
           message.port_forward_channel = PortForwardChannel.decode(reader, reader.uint32());
           continue;
         }
+        case 36: {
+          if (tag !== 290) {
+            break;
+          }
+
+          message.webrtc_ice = WebrtcIce.decode(reader, reader.uint32());
+          continue;
+        }
+        case 37: {
+          if (tag !== 298) {
+            break;
+          }
+
+          message.webrtc_transport_decision = WebrtcTransportDecision.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -14810,6 +14925,10 @@ export const Message: MessageFns<Message> = {
       lan_server_hello: isSet(object.lan_server_hello) ? LanServerHello.fromJSON(object.lan_server_hello) : undefined,
       port_forward_channel: isSet(object.port_forward_channel)
         ? PortForwardChannel.fromJSON(object.port_forward_channel)
+        : undefined,
+      webrtc_ice: isSet(object.webrtc_ice) ? WebrtcIce.fromJSON(object.webrtc_ice) : undefined,
+      webrtc_transport_decision: isSet(object.webrtc_transport_decision)
+        ? WebrtcTransportDecision.fromJSON(object.webrtc_transport_decision)
         : undefined,
     };
   },
@@ -14915,6 +15034,12 @@ export const Message: MessageFns<Message> = {
     if (message.port_forward_channel !== undefined) {
       obj.port_forward_channel = PortForwardChannel.toJSON(message.port_forward_channel);
     }
+    if (message.webrtc_ice !== undefined) {
+      obj.webrtc_ice = WebrtcIce.toJSON(message.webrtc_ice);
+    }
+    if (message.webrtc_transport_decision !== undefined) {
+      obj.webrtc_transport_decision = WebrtcTransportDecision.toJSON(message.webrtc_transport_decision);
+    }
     return obj;
   },
 
@@ -15017,6 +15142,13 @@ export const Message: MessageFns<Message> = {
     message.port_forward_channel = (object.port_forward_channel !== undefined && object.port_forward_channel !== null)
       ? PortForwardChannel.fromPartial(object.port_forward_channel)
       : undefined;
+    message.webrtc_ice = (object.webrtc_ice !== undefined && object.webrtc_ice !== null)
+      ? WebrtcIce.fromPartial(object.webrtc_ice)
+      : undefined;
+    message.webrtc_transport_decision =
+      (object.webrtc_transport_decision !== undefined && object.webrtc_transport_decision !== null)
+        ? WebrtcTransportDecision.fromPartial(object.webrtc_transport_decision)
+        : undefined;
     return message;
   },
 };
